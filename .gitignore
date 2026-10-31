@@ -1,0 +1,4 @@
+venv/
+.venv/
+sprint.db
+__pycache__/

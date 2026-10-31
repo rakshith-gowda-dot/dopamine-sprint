@@ -1,0 +1,78 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>60-Day Dopamine Sprint</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+<style>
+body{background:radial-gradient(circle at 20% 0%,#1e1b4b,#05050f 60%) fixed;color:#e5e7eb}
+.glass{background:rgba(255,255,255,.05);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.1);border-radius:1.25rem;transition:box-shadow .4s}
+.glow{box-shadow:0 0 24px rgba(163,255,18,.5);border-color:rgba(163,255,18,.6)}
+.bar{transition:width .6s cubic-bezier(.2,1.4,.4,1)}
+.fill{transition:height .5s cubic-bezier(.2,1.5,.4,1)}
+@keyframes pop{50%{transform:scale(1.3)}}.pop{animation:pop .3s}
+@keyframes ring{50%{box-shadow:0 0 0 3px #22d3ee}}.today{animation:ring 1.2s infinite}
+.fx{position:fixed;pointer-events:none;font-weight:900;z-index:60;text-shadow:0 0 10px #a3ff12;animation:rise .9s ease-out forwards}@keyframes rise{to{transform:translateY(-90px) scale(1.5);opacity:0}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style></head>
+<body x-data="app()" x-init="init()" class="min-h-screen p-4 pb-16">
+<div x-show="crit" x-transition class="fixed top-4 inset-x-0 z-40 text-center"><span class="px-5 py-2 rounded-full bg-amber-400 text-black font-black shadow-lg">🎰 CRIT HIT! +<span x-text="crit"></span> XP</span></div>
+<div x-show="clear" x-transition @click="clear=false" class="fixed inset-0 z-50 flex items-center justify-center bg-black/85"><div class="text-center"><div class="text-6xl font-black text-lime-300 animate-bounce">LEVEL UP!</div><div class="text-3xl mt-3 text-cyan-300 font-bold">DAY CLEARED! +300 XP</div><button @click.stop="openChest()" class="mt-8 px-6 py-4 rounded-2xl bg-amber-400 text-black font-black text-lg max-w-xs" x-text="reward||'🎁 Tap to open reward chest'"></button><div class="mt-6 text-xs text-gray-400">tap anywhere else to close</div></div></div>
+<template x-if="s"><main class="max-w-2xl mx-auto space-y-4">
+ <div class="flex justify-between text-sm"><b class="text-lime-300" x-text="'⚡ '+s.name"></b><a href="/logout" class="text-gray-400">logout</a></div>
+ <div class="glass p-5 text-center">
+  <div class="text-4xl font-black tracking-wider bg-gradient-to-r from-lime-300 via-cyan-300 to-indigo-400 bg-clip-text text-transparent" x-text="s.done?'SPRINT COMPLETE 🏆':'DAY '+s.day+' OF 60'"></div>
+  <div class="mt-2 text-orange-400 font-bold" x-text="'🔥 '+s.streak+'-DAY STREAK! '+(s.streak?'DON’T BREAK THE CHAIN!':'START THE CHAIN TODAY')"></div>
+  <div class="mt-3 text-xs text-gray-400" x-text="'LVL '+s.lvl+' · '+s.title+' · '+s.xp+' XP'"></div>
+  <div class="h-2 mt-1 rounded bg-white/10"><div class="h-2 rounded bg-cyan-400 bar" :style="'width:'+s.xp_pct+'%'"></div></div>
+ </div>
+ <div x-show="s.mult>1" class="glass p-3 text-center text-amber-300 font-bold text-sm">⚡ COMEBACK MODE: 2× XP today. Missing a day is fine. Coming back is the game.</div>
+ <div class="glass p-4" :class="s.pct==100&&'glow'">
+  <div class="flex justify-between text-sm mb-1"><b>Daily sprint</b><span x-text="s.pct+'%'"></span></div>
+  <div class="h-4 rounded-full bg-white/10 overflow-hidden"><div class="h-4 bar bg-gradient-to-r from-indigo-500 via-cyan-400 to-lime-300" :style="'width:'+s.pct+'%'"></div></div>
+  <div class="text-xs mt-2 text-gray-300" x-text="nudge()"></div>
+ </div>
+ <div class="glass p-4" :class="s.fr.med==1&&'glow'"><div class="flex justify-between items-center">
+  <div><b>🧘 Meditation</b><div class="text-xs text-gray-400">+100 XP</div></div>
+  <button @click="tap('med',s.v.med?-1:1,$event)" class="w-14 h-14 rounded-2xl border-2 text-2xl transition" :class="s.v.med?'bg-lime-400 text-black border-lime-300 pop':'border-white/20'" x-text="s.v.med?'✓':''"></button></div></div>
+ <div class="glass p-4" :class="s.fr.water==1&&'glow'">
+  <div class="flex justify-between mb-2"><b>💧 Hydration</b><span x-text="s.v.water+'/8'"></span></div>
+  <div class="grid grid-cols-8 gap-1.5"><template x-for="i in 8"><button @click="tap('water',i===s.v.water?-1:i-s.v.water,$event)" class="relative h-16 rounded-b-2xl rounded-t border border-cyan-300/40 overflow-hidden"><div class="fill absolute bottom-0 w-full bg-gradient-to-t from-cyan-500 to-sky-300" :style="'height:'+(i<=s.v.water?100:0)+'%'"></div></button></template></div>
+  <div class="h-2 mt-3 rounded bg-white/10"><div class="h-2 rounded bar bg-cyan-400" :style="'width:'+s.fr.water*100+'%'"></div></div>
+ </div>
+ <template x-for="h in hours" :key="h.k"><div class="glass p-4" :class="s.fr[h.k]==1&&'glow'">
+  <div class="flex justify-between"><b x-text="h.t"></b><span class="text-xs text-gray-400" x-text="s.v[h.k]+'h / '+h.g+'h goal'"></span></div>
+  <div class="flex gap-2 my-3"><template x-for="i in h.n"><button @click="tap(h.k,i===s.v[h.k]?-1:i-s.v[h.k],$event)" class="flex-1 h-12 rounded-xl border-2 font-bold transition" :class="i<=s.v[h.k]?(i>h.g?'bg-amber-400 text-black border-amber-200 pop':'bg-lime-400 text-black border-lime-200 pop'):'border-white/20 text-gray-500'" x-text="i+'h'"></button></template></div>
+  <div class="text-xs text-amber-300" x-text="'🏦 Buffer bank: '+s.bank[h.k]+'h'+(s.cover[h.k]?' · auto-covering '+s.cover[h.k]+'h today':'')"></div>
+  <div class="h-2 mt-2 rounded bg-white/10"><div class="h-2 rounded bar bg-lime-300" :style="'width:'+s.fr[h.k]*100+'%'"></div></div>
+ </div></template>
+ <div class="glass p-4"><b class="text-sm">60-day chain</b>
+  <div class="grid grid-cols-10 gap-1.5 mt-2"><template x-for="(g,i) in s.grid"><div class="aspect-square rounded" :class="[g===true?'bg-lime-400 glow':g===false?'bg-red-900/60':'bg-white/10', i+1===s.day&&'today']"></div></template></div>
+  <div class="flex gap-2 mt-3 text-xs"><template x-for="m in [3,7,14,30,60]"><span class="px-2 py-1 rounded-full border" :class="s.streak>=m?'border-lime-300 text-lime-300':'border-white/10 text-gray-600'" x-text="(s.streak>=m?'🏅 ':'🔒 ')+m+'d'"></span></template></div>
+ </div>
+ </main></template>
+<script>
+const AC=window.AudioContext||window.webkitAudioContext;let ctx;
+function tone(f,t,d,type='triangle',v=.15){ctx=ctx||new AC();const o=ctx.createOscillator(),g=ctx.createGain(),n=ctx.currentTime+t;o.type=type;o.frequency.setValueAtTime(f,n);o.frequency.exponentialRampToValueAtTime(f*1.6,n+d);g.gain.setValueAtTime(v,n);g.gain.exponentialRampToValueAtTime(.001,n+d);o.connect(g);g.connect(ctx.destination);o.start(n);o.stop(n+d)}
+// EDIT THESE: put real rewards you actually want. The chest opens when you clear a day.
+const rewards=["🎮 45 min guilt-free gaming","🍫 Your favourite snack, no guilt","☕ Fancy coffee break","🎬 One episode, zero guilt","🛌 15 min nap","💎 RARE: buy yourself something under ₹500"];
+const colors=['#a3ff12','#22d3ee','#818cf8','#fbbf24','#f472b6'];
+function app(){return{s:null,crit:0,clear:false,combo:0,timer:null,
+ hours:[{k:'up',t:'🛡️ Pentest & DevSecOps',g:2,n:6},{k:'prob',t:'🧠 Problem solving & business',g:1,n:4}],
+ reward:'',now:Date.now(),async init(){this.s=await (await fetch('/api/state')).json();setInterval(()=>this.now=Date.now(),30000)},
+ openChest(){this.reward=rewards[Math.floor(Math.random()*rewards.length)];tone(784,0,.2,'square',.1);tone(1175,.12,.3,'square',.1);confetti({particleCount:120,spread:100,origin:{y:.6},colors})},
+ fx(e,t){const n=document.createElement('div');n.className='fx text-lime-300 text-xl';n.textContent=t;n.style.left=e.clientX-20+'px';n.style.top=e.clientY-20+'px';document.body.appendChild(n);setTimeout(()=>n.remove(),900)},
+ async tap(h,d,e){const was=this.s.cleared;
+  if(d>0){this.fx(e,'+'+d*{med:100,water:20,up:75,prob:75}[h]*this.s.mult+' XP');navigator.vibrate&&navigator.vibrate([15,30,15])}
+  const r=await fetch('/api/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({habit:h,delta:d})});
+  this.s=await r.json();
+  if(d>0){this.combo++;clearTimeout(this.timer);this.timer=setTimeout(()=>this.combo=0,2500);
+   tone(300+Math.min(this.combo,12)*45,0,.12);   // pitch climbs with combo
+   confetti({particleCount:30+this.combo*4,spread:70,origin:{x:e.clientX/innerWidth,y:e.clientY/innerHeight},colors});
+   if(this.s.crit){this.crit=this.s.crit;tone(900,0,.15,'square',.1);tone(1300,.12,.25,'square',.1);setTimeout(()=>this.crit=0,2000)}
+   if(this.s.cleared&&!was){this.clear=true;[523,659,784,1047,1319].forEach((f,i)=>tone(f,i*.1,.25,'square',.1));
+    confetti({particleCount:250,spread:160,startVelocity:45,origin:{y:.5},colors});this.reward=''}}},
+ nudge(){const s=this.s;if(s.cleared)return '🏆 Day cleared. Tomorrow makes it '+(s.streak+1)+' days.';
+  let left=(s.v.med?0:1)+Math.max(0,8-s.v.water)+Math.max(0,2-s.v.up-s.cover.up)+Math.max(0,1-s.v.prob-s.cover.prob);
+  const t=new Date();t.setHours(24,0,0,0);const r=t-this.now;
+  return (left<=3?'⚡ SO CLOSE: ':'')+left+' tick'+(left>1?'s':'')+' to clear the day'+(s.streak?' and save your '+s.streak+'-day streak':'')+' · ⏳ '+Math.floor(r/36e5)+'h '+Math.floor(r%36e5/6e4)+'m left'}}}
+</script></body></html>

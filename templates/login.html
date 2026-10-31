@@ -1,0 +1,10 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dopamine Sprint</title><script src="https://cdn.tailwindcss.com"></script></head>
+<body class="min-h-screen flex items-center justify-center p-4 text-gray-100" style="background:radial-gradient(circle at 20% 0%,#1e1b4b,#05050f 60%)">
+<form method="post" class="w-full max-w-sm p-6 rounded-3xl border border-white/10 bg-white/5 backdrop-blur space-y-4">
+<h1 class="text-3xl font-black text-lime-300">60-DAY SPRINT</h1>
+<p class="text-sm text-gray-400">First login creates your account. After that it is locked to you.</p>
+{% if err %}<p class="text-red-400 text-sm">{{ err }}</p>{% endif %}
+<input name="name" placeholder="name" class="w-full p-3 rounded-xl bg-black/40 border border-white/10" autofocus>
+<input name="pw" type="password" placeholder="password" class="w-full p-3 rounded-xl bg-black/40 border border-white/10">
+<button class="w-full p-3 rounded-xl bg-lime-400 text-black font-black">Start the sprint</button></form></body></html>
