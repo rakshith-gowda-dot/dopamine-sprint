@@ -41,12 +41,17 @@ body{background:radial-gradient(circle at 20% 0%,#1e1b4b,#05050f 60%) fixed;colo
  </div>
  <template x-for="h in hours" :key="h.k"><div class="glass p-4" :class="s.fr[h.k]==1&&'glow'">
   <div class="flex justify-between"><b x-text="h.t"></b><span class="text-xs text-gray-400" x-text="s.v[h.k]+'h / '+h.g+'h goal'"></span></div>
-  <div class="flex gap-2 my-3"><template x-for="i in h.n"><button @click="tap(h.k,i===s.v[h.k]?-1:i-s.v[h.k],$event)" class="flex-1 h-12 rounded-xl border-2 font-bold transition" :class="i<=s.v[h.k]?(i>h.g?'bg-amber-400 text-black border-amber-200 pop':'bg-lime-400 text-black border-lime-200 pop'):'border-white/20 text-gray-500'" x-text="i+'h'"></button></template></div>
+  <div class="flex flex-wrap gap-2 my-3"><template x-for="i in h.n"><button @click="tap(h.k,i===s.v[h.k]?-1:i-s.v[h.k],$event)" class="flex-1 min-w-[3.2rem] h-12 rounded-xl border-2 font-bold transition" :class="i<=s.v[h.k]?(i>h.g?'bg-amber-400 text-black border-amber-200 pop':'bg-lime-400 text-black border-lime-200 pop'):'border-white/20 text-gray-500'" x-text="i+'h'"></button></template></div>
   <div class="text-xs text-amber-300" x-text="'🏦 Buffer bank: '+s.bank[h.k]+'h'+(s.cover[h.k]?' · auto-covering '+s.cover[h.k]+'h today':'')"></div>
+  <div class="text-xs text-red-300 mt-1" x-show="s.debt[h.k]>0" x-text="'📉 '+s.debt[h.k]+'h owed from missed days. Extra hours today repay the oldest first.'"></div>
   <div class="h-2 mt-2 rounded bg-white/10"><div class="h-2 rounded bar bg-lime-300" :style="'width:'+s.fr[h.k]*100+'%'"></div></div>
  </div></template>
  <div class="glass p-4"><b class="text-sm">60-day chain</b>
-  <div class="grid grid-cols-10 gap-1.5 mt-2"><template x-for="(g,i) in s.grid"><div class="aspect-square rounded" :class="[g===true?'bg-lime-400 glow':g===false?'bg-red-900/60':'bg-white/10', i+1===s.day&&'today']"></div></template></div>
+  <div class="grid grid-cols-10 gap-1.5 mt-2"><template x-for="(g,i) in s.grid"><div @click="i<s.days.length&&(sel=sel===i?null:i)" class="aspect-square rounded cursor-pointer" :class="[g===true?'bg-lime-400 glow':g===false?'bg-red-900/60':'bg-white/10', i+1===s.day&&'today', sel===i&&'ring-2 ring-cyan-300']"></div></template></div>
+  <template x-if="sel!==null&&s.days[sel]"><div class="mt-3 p-3 rounded-xl bg-white/5 text-sm space-y-1">
+   <div class="font-bold" x-text="'Day '+(sel+1)+' · '+s.days[sel].date+' · '+(s.days[sel].ok?'CLEARED ✅':s.days[sel].ok===false?'MISSED ❌':'IN PROGRESS ⏳')"></div>
+   <template x-for="l in lines(s.days[sel])"><div x-text="l"></div></template>
+   <div class="text-xs text-amber-300" x-show="s.days[sel].ok===false" x-text="(s.days[sel].v.med&&s.days[sel].v.water>=8)?'Only hours are short. Extra hours on any later day repay this one, oldest first.':'Meditation and water can’t be repaid with extra hours, only the hour habits can.'"></div></div></template>
   <div class="flex gap-2 mt-3 text-xs"><template x-for="m in [3,7,14,30,60]"><span class="px-2 py-1 rounded-full border" :class="s.streak>=m?'border-lime-300 text-lime-300':'border-white/10 text-gray-600'" x-text="(s.streak>=m?'🏅 ':'🔒 ')+m+'d'"></span></template></div>
  </div>
  </main></template>
@@ -57,8 +62,12 @@ function tone(f,t,d,type='triangle',v=.15){ctx=ctx||new AC();const o=ctx.createO
 const rewards=["🎮 45 min guilt-free gaming","🍫 Your favourite snack, no guilt","☕ Fancy coffee break","🎬 One episode, zero guilt","🛌 15 min nap","💎 RARE: buy yourself something under ₹500"];
 const colors=['#a3ff12','#22d3ee','#818cf8','#fbbf24','#f472b6'];
 function app(){return{s:null,crit:0,clear:false,combo:0,timer:null,
- hours:[{k:'up',t:'🛡️ Pentest & DevSecOps',g:2,n:6},{k:'prob',t:'🧠 Problem solving & business',g:1,n:4}],
- reward:'',now:Date.now(),async init(){this.s=await (await fetch('/api/state')).json();setInterval(()=>this.now=Date.now(),30000)},
+ hours:[{k:'up',t:'🛡️ Pentest & DevSecOps',g:2,n:10},{k:'prob',t:'🧠 Problem solving & business',g:1,n:8}],
+ sel:null,reward:'',now:Date.now(),async init(){const r=await fetch('/api/state');if(r.status==401)return location='/login';this.s=await r.json();setInterval(()=>this.now=Date.now(),30000)},
+ lines(dy){const v=dy.v,L=[(v.med?'✅':'❌')+' Meditation',(v.water>=8?'✅':'❌')+' Water '+v.water+'/8'];
+ for(const [k,n,g] of [['up','Pentest & DevSecOps',2],['prob','Problem solving',1]]){let t=v[k]+'h / '+g+'h';
+  if(dy.cover[k])t+=' · +'+dy.cover[k]+'h buffer';if(dy.paid[k])t+=' · +'+dy.paid[k]+'h repaid by extra hours';
+  L.push((dy.short[k]?'❌ ':'✅ ')+n+' '+t+(dy.short[k]?' · short '+dy.short[k]+'h':''))}return L},
  openChest(){this.reward=rewards[Math.floor(Math.random()*rewards.length)];tone(784,0,.2,'square',.1);tone(1175,.12,.3,'square',.1);confetti({particleCount:120,spread:100,origin:{y:.6},colors})},
  fx(e,t){const n=document.createElement('div');n.className='fx text-lime-300 text-xl';n.textContent=t;n.style.left=e.clientX-20+'px';n.style.top=e.clientY-20+'px';document.body.appendChild(n);setTimeout(()=>n.remove(),900)},
  async tap(h,d,e){const was=this.s.cleared;

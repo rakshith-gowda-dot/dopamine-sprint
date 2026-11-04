@@ -8,7 +8,7 @@ DB = os.path.join(BASE, "sprint.db")
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-me-in-production")
 GOALS = {"med": 1, "water": 8, "up": 2, "prob": 1}   # daily targets
-MAXV = {"med": 1, "water": 8, "up": 8, "prob": 8}
+MAXV = {"med": 1, "water": 8, "up": 12, "prob": 12}
 XP = {"med": 100, "water": 20, "up": 75, "prob": 75}  # xp per unit
 TITLES = ["Rookie", "Script Kiddie", "Packet Sniffer", "Exploit Dev", "Zero-Day Hunter", "Root Legend"]
 
@@ -35,34 +35,57 @@ def compute(uid):
     start = date.fromisoformat(db().execute("SELECT start FROM users WHERE id=?", (uid,)).fetchone()["start"])
     t = today(); span = (t - start).days; n = min(span, 59)
     rows = {r["day"]: r for r in db().execute("SELECT * FROM logs WHERE uid=?", (uid,))}
-    bank = {"up": 0, "prob": 0}; grid = []; xp = 0; v = {}; cover = {}; ok = False; prev = None; m = 1
-    for i in range(n + 1):
+    bank = {"up": 0, "prob": 0}; debts = {"up": [], "prob": []}; D = []
+    for i in range(n + 1):   # pass 1: buffer cover, and surplus repaying the oldest missed hours
         d = start + timedelta(i); r = rows.get(d.isoformat())
-        m = 2 if prev is False else 1   # comeback mode: 2x XP after a missed day
         v = {k: (r[k] if r else 0) for k in GOALS}
-        ok = v["med"] >= 1 and v["water"] >= 8; cover = {}
-        for k in ("up", "prob"):   # buffer: banked surplus hours auto-cover deficits
-            use = min(max(0, GOALS[k] - v[k]), bank[k]); cover[k] = use
-            ok = ok and v[k] + use >= GOALS[k]
-            if d < t: bank[k] += max(0, v[k] - GOALS[k]) - use
-        xp += (sum(v[k] * XP[k] for k in v) + (r["bonus"] if r else 0) + (300 if ok else 0)) * m
+        day = dict(i=i, date=d.isoformat(), v=v, bonus=(r["bonus"] if r else 0), cover={}, paid={}, short={})
+        for k in ("up", "prob"):
+            h, goal = v[k], GOALS[k]
+            use = min(max(0, goal - h), bank[k]); bank[k] -= use
+            day["cover"][k] = use; day["paid"][k] = 0
+            left = max(0, goal - h) - use
+            if left and d < t: debts[k].append([i, left])
+            sur = max(0, h - goal)
+            for dbt in debts[k]:   # extra hours (even today's) repay oldest debt first
+                if not sur: break
+                p = min(sur, dbt[1]); dbt[1] -= p; sur -= p; D[dbt[0]]["paid"][k] += p
+            if d < t: bank[k] += sur
+        D.append(day)
+    grid = []; xp = 0; prev = None; m = 1
+    for day in D:   # pass 2: final day status after repayments
+        v = day["v"]; d = date.fromisoformat(day["date"])
+        ok = v["med"] >= 1 and v["water"] >= 8
+        for k in ("up", "prob"):
+            day["short"][k] = max(0, GOALS[k] - v[k] - day["cover"][k] - day["paid"][k])
+            ok = ok and day["short"][k] == 0
+        m = 2 if prev is False else 1   # comeback mode: 2x XP after a missed day
+        xp += (sum(v[k] * XP[k] for k in v) + day["bonus"] + (300 if ok else 0)) * m
         prev = ok if d < t else None
-        grid.append(ok if (d < t or ok) else None)
-    for k in ("up", "prob"): bank[k] -= cover[k]   # today's cover is shown separately
+        day["ok"] = ok if (d < t or ok) else None
+        grid.append(day["ok"])
     seq = grid[:]
     if seq and seq[-1] is None: seq.pop()
     s = 0
     while seq and seq[-1]: s += 1; seq.pop()
+    v, cover = D[-1]["v"], D[-1]["cover"]
     fr = {"med": min(1, v["med"]), "water": v["water"] / 8,
           "up": min(1, (v["up"] + cover["up"]) / 2), "prob": min(1, v["prob"] + cover["prob"])}
     return dict(day=n + 1, done=span > 59, streak=s, xp=xp, grid=grid + [None] * (60 - len(grid)),
-                v=v, cover=cover, bank=bank, fr=fr, mult=m, pct=round(sum(fr.values()) / 4 * 100), cleared=ok)
+                v=v, cover=cover, bank=bank, debt={k: sum(x[1] for x in debts[k]) for k in debts},
+                days=D, fr=fr, mult=m, pct=round(sum(fr.values()) / 4 * 100), cleared=D[-1]["ok"] is True)
 
 def state(uid):
     c = compute(uid); me = db().execute("SELECT name FROM users WHERE id=?", (uid,)).fetchone()
     c.update(name=me["name"], lvl=c["xp"] // 600 + 1, xp_pct=c["xp"] % 600 // 6)
     c["title"] = TITLES[min(c["lvl"] - 1, 5)]
     return c
+
+@app.before_request
+def drop_stale_session():  # e.g. after deleting sprint.db, the old cookie points to a missing user
+    uid = session.get("uid")
+    if uid and not db().execute("SELECT 1 FROM users WHERE id=?", (uid,)).fetchone():
+        session.clear()
 
 @app.route("/")
 def index():
