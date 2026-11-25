@@ -73,7 +73,7 @@ def compute(uid):
           "up": min(1, (v["up"] + cover["up"]) / 2), "prob": min(1, v["prob"] + cover["prob"])}
     return dict(day=n + 1, done=span > 59, streak=s, xp=xp, grid=grid + [None] * (60 - len(grid)),
                 v=v, cover=cover, bank=bank, debt={k: sum(x[1] for x in debts[k]) for k in debts},
-                days=D, fr=fr, mult=m, pct=round(sum(fr.values()) / 4 * 100), cleared=D[-1]["ok"] is True)
+                days=D, totals={k: sum(x["v"][k] for x in D) for k in GOALS}, fr=fr, mult=m, pct=round(sum(fr.values()) / 4 * 100), cleared=D[-1]["ok"] is True)
 
 def state(uid):
     c = compute(uid); me = db().execute("SELECT name FROM users WHERE id=?", (uid,)).fetchone()
@@ -128,6 +128,20 @@ def api_set():
     c.execute(f"UPDATE logs SET {k}=?, bonus=bonus+? WHERE uid=? AND day=?", (new, crit, uid, day)); c.commit()
     st = state(uid); st["crit"] = crit
     return jsonify(st)
+
+@app.post("/api/setday")
+def api_setday():   # edit any logged day (forgot to log yesterday? fix it here)
+    uid = session.get("uid")
+    if not uid: return jsonify(error=1), 401
+    j = request.get_json(force=True); k = j.get("habit")
+    try: day = date.fromisoformat(j["date"])
+    except Exception: return jsonify(error=1), 400
+    start = date.fromisoformat(db().execute("SELECT start FROM users WHERE id=?", (uid,)).fetchone()["start"])
+    if k not in GOALS or not (start <= day <= today()): return jsonify(error=1), 400
+    c = db(); c.execute("INSERT OR IGNORE INTO logs(uid,day) VALUES(?,?)", (uid, day.isoformat()))
+    c.execute(f"UPDATE logs SET {k}=? WHERE uid=? AND day=?", (max(0, min(MAXV[k], int(j.get("value", 0)))), uid, day.isoformat()))
+    c.commit()
+    return jsonify(state(uid))
 
 if __name__ == "__main__":
     app.run(debug=True)

@@ -46,11 +46,14 @@ body{background:radial-gradient(circle at 20% 0%,#1e1b4b,#05050f 60%) fixed;colo
   <div class="text-xs text-red-300 mt-1" x-show="s.debt[h.k]>0" x-text="'📉 '+s.debt[h.k]+'h owed from missed days. Extra hours today repay the oldest first.'"></div>
   <div class="h-2 mt-2 rounded bg-white/10"><div class="h-2 rounded bar bg-lime-300" :style="'width:'+s.fr[h.k]*100+'%'"></div></div>
  </div></template>
- <div class="glass p-4"><b class="text-sm">60-day chain</b>
-  <div class="grid grid-cols-10 gap-1.5 mt-2"><template x-for="(g,i) in s.grid"><div @click="i<s.days.length&&(sel=sel===i?null:i)" class="aspect-square rounded cursor-pointer" :class="[g===true?'bg-lime-400 glow':g===false?'bg-red-900/60':'bg-white/10', i+1===s.day&&'today', sel===i&&'ring-2 ring-cyan-300']"></div></template></div>
+  <div class="glass p-4"><b class="text-sm">Your totals so far</b><div class="grid grid-cols-2 gap-3 mt-3 text-center">
+  <template x-for="t in totalsList()"><div class="p-3 rounded-xl bg-white/5"><div class="text-2xl font-black text-lime-300" x-text="t.i+' '+t.n"></div><div class="text-xs text-gray-400" x-text="t.l"></div></div></template></div></div>
+ <div class="glass p-4"><b class="text-sm">60-day chain</b> <span class="text-xs text-gray-400">· each box: 🧘 💧 / 🛡️ 🧠 · tap a day to view or edit</span>
+  <div class="grid grid-cols-10 gap-1.5 mt-2"><template x-for="(g,i) in s.grid"><div @click="i<s.days.length&&(sel=sel===i?null:i)" class="aspect-square rounded-md p-[3px] grid grid-cols-2 gap-[3px] cursor-pointer bg-white/5" :class="[g===true&&'glow', i+1===s.day&&'today', sel===i&&'ring-2 ring-cyan-300']"><template x-for="b in boxes(i)"><div class="rounded-sm" :class="b"></div></template></div></template></div>
   <template x-if="sel!==null&&s.days[sel]"><div class="mt-3 p-3 rounded-xl bg-white/5 text-sm space-y-1">
    <div class="font-bold" x-text="'Day '+(sel+1)+' · '+s.days[sel].date+' · '+(s.days[sel].ok?'CLEARED ✅':s.days[sel].ok===false?'MISSED ❌':'IN PROGRESS ⏳')"></div>
-   <template x-for="l in lines(s.days[sel])"><div x-text="l"></div></template>
+   <template x-for="r in rows(s.days[sel])" :key="r.k"><div class="flex items-center justify-between gap-2"><span x-text="r.t"></span><span class="flex items-center gap-2 shrink-0"><button @click="edit(s.days[sel],r.k,-1)" class="w-8 h-8 rounded-lg bg-white/10">−</button><b class="w-6 text-center" x-text="s.days[sel].v[r.k]"></b><button @click="edit(s.days[sel],r.k,1)" class="w-8 h-8 rounded-lg bg-lime-400 text-black font-black">+</button></span></div></template>
+   <div class="text-xs text-gray-400">Forgot to log? Use − / + to fix this day.</div>
    <div class="text-xs text-amber-300" x-show="s.days[sel].ok===false" x-text="(s.days[sel].v.med&&s.days[sel].v.water>=8)?'Only hours are short. Extra hours on any later day repay this one, oldest first.':'Meditation and water can’t be repaid with extra hours, only the hour habits can.'"></div></div></template>
   <div class="flex gap-2 mt-3 text-xs"><template x-for="m in [3,7,14,30,60]"><span class="px-2 py-1 rounded-full border" :class="s.streak>=m?'border-lime-300 text-lime-300':'border-white/10 text-gray-600'" x-text="(s.streak>=m?'🏅 ':'🔒 ')+m+'d'"></span></template></div>
  </div>
@@ -64,10 +67,15 @@ const colors=['#a3ff12','#22d3ee','#818cf8','#fbbf24','#f472b6'];
 function app(){return{s:null,crit:0,clear:false,combo:0,timer:null,
  hours:[{k:'up',t:'🛡️ Pentest & DevSecOps',g:2,n:10},{k:'prob',t:'🧠 Problem solving & business',g:1,n:8}],
  sel:null,reward:'',now:Date.now(),async init(){const r=await fetch('/api/state');if(r.status==401)return location='/login';this.s=await r.json();setInterval(()=>this.now=Date.now(),30000)},
- lines(dy){const v=dy.v,L=[(v.med?'✅':'❌')+' Meditation',(v.water>=8?'✅':'❌')+' Water '+v.water+'/8'];
- for(const [k,n,g] of [['up','Pentest & DevSecOps',2],['prob','Problem solving',1]]){let t=v[k]+'h / '+g+'h';
-  if(dy.cover[k])t+=' · +'+dy.cover[k]+'h buffer';if(dy.paid[k])t+=' · +'+dy.paid[k]+'h repaid by extra hours';
-  L.push((dy.short[k]?'❌ ':'✅ ')+n+' '+t+(dy.short[k]?' · short '+dy.short[k]+'h':''))}return L},
+ rows(dy){const v=dy.v;return [{k:'med',t:(v.med?'✅':'❌')+' Meditation'},{k:'water',t:(v.water>=8?'✅':'❌')+' Water /8'},
+  {k:'up',t:(dy.short.up?'❌':'✅')+' Pentest (2h goal)'+(dy.cover.up?' +'+dy.cover.up+'h buffer':'')+(dy.paid.up?' +'+dy.paid.up+'h repaid':'')},
+  {k:'prob',t:(dy.short.prob?'❌':'✅')+' Problem solving (1h goal)'+(dy.cover.prob?' +'+dy.cover.prob+'h buffer':'')+(dy.paid.prob?' +'+dy.paid.prob+'h repaid':'')}]},
+ boxes(i){const d=this.s.days[i];if(!d)return Array(4).fill('bg-white/10');const pend=d.ok===null;
+  return [d.v.med>=1,d.v.water>=8,d.short.up==0,d.short.prob==0].map(x=>x?'bg-lime-400':pend?'bg-white/15':'bg-red-600/70')},
+ totalsList(){const s=this.s,L=s.days.length;return [{i:'🧘',n:s.totals.med,l:'meditations in '+L+' days'},{i:'💧',n:s.totals.water,l:'glasses · goal '+L*8},
+  {i:'🛡️',n:s.totals.up+'h',l:'Pentest & DevSecOps · goal '+L*2+'h'},{i:'🧠',n:s.totals.prob+'h',l:'Problem solving · goal '+L+'h'}]},
+ async edit(dy,k,d){const max={med:1,water:8,up:12,prob:12}[k],val=Math.max(0,Math.min(max,dy.v[k]+d));if(val===dy.v[k])return;
+  const r=await fetch('/api/setday',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:dy.date,habit:k,value:val})});this.s=await r.json();if(d>0)tone(420,0,.1)},
  openChest(){this.reward=rewards[Math.floor(Math.random()*rewards.length)];tone(784,0,.2,'square',.1);tone(1175,.12,.3,'square',.1);confetti({particleCount:120,spread:100,origin:{y:.6},colors})},
  fx(e,t){const n=document.createElement('div');n.className='fx text-lime-300 text-xl';n.textContent=t;n.style.left=e.clientX-20+'px';n.style.top=e.clientY-20+'px';document.body.appendChild(n);setTimeout(()=>n.remove(),900)},
  async tap(h,d,e){const was=this.s.cleared;
